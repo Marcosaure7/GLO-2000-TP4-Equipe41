@@ -74,7 +74,10 @@ class Server:
         """
         username = payload.get("username")
         password = payload.get("password")
-        return gloutils.GloMessage()
+        mess = gloutils.GloMessage()
+        mess["header"] = gloutils.Headers.OK
+        return mess
+
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
@@ -130,16 +133,26 @@ class Server:
 #     header: Headers
 #     payload: Union[ErrorPayload, AuthPayload, EmailContentPayload,
 #                    EmailListPayload, EmailChoicePayload, StatsPayload]
+#
+
+    def send_conection_confirmation(self, rep : gloutils.GloMessage , client_soc: socket.socket) -> None:
+        payload = rep.get("payload")
+        if (type(payload) == gloutils.AuthPayload):
+            rep = self._login(client_soc, payload)
+            if (rep.get("header") == gloutils.Headers.OK):
+                self._logged_users[client_soc] = payload.get("username")
+                glosocket.snd_mesg(client_soc, str(rep))
+            else:
+                glosocket.snd_mesg(client_soc, str(rep))
+
 
     def handle_client(self, client_soc: socket.socket) -> None:
         message = glosocket.recv_mesg(client_soc)
         rep : gloutils.GloMessage = eval(message)
         if rep.get("header") == gloutils.Headers.AUTH_LOGIN:
-            payload = rep.get("payload")
-            if (type(payload) == gloutils.AuthPayload):
-                self._login(client_soc, payload)
-            else:
-                pass
+            self.send_conection_confirmation(rep, client_soc)
+        elif ():
+            pass
 
 
     def run(self):
