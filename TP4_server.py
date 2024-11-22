@@ -33,10 +33,11 @@ class Server:
 
         S'assure que les dossiers de données du serveur existent.
         """
-        # self._server_socket
-        # self._client_socs
-        # self._logged_users
-        # ...
+        self._server_socket = socket.socket(socket.AF_INET, gloutils.APP_PORT)
+        self._client_socs: list[socket.socket] = []
+        self._logged_users: dict[socket.socket, str]  = {}
+
+
 
     def cleanup(self) -> None:
         """Ferme toutes les connexions résiduelles."""
@@ -46,6 +47,7 @@ class Server:
 
     def _accept_client(self) -> None:
         """Accepte un nouveau client."""
+        client_socket, _ = self._server_socket.accept()
 
     def _remove_client(self, client_soc: socket.socket) -> None:
         """Retire le client des structures de données et ferme sa connexion."""
@@ -70,6 +72,8 @@ class Server:
         Si les identifiants sont valides, associe le socket à l'utilisateur et
         retourne un succès, sinon retourne un message d'erreur.
         """
+        username = payload.get("username")
+        password = payload.get("password")
         return gloutils.GloMessage()
 
     def _logout(self, client_soc: socket.socket) -> None:
@@ -116,14 +120,49 @@ class Server:
         """
         return gloutils.GloMessage()
 
+# class GloMessage(TypedDict, total=False):
+#     """
+#     Classe à utiliser pour générer des messages.
+
+#     Les classes *Payload correspondent à des entêtes spécifiques
+#     certaines entêtes n'ont pas besoin de payload.
+#     """
+#     header: Headers
+#     payload: Union[ErrorPayload, AuthPayload, EmailContentPayload,
+#                    EmailListPayload, EmailChoicePayload, StatsPayload]
+
+    def handle_client(self, client_soc: socket.socket) -> None:
+        message = glosocket.recv_mesg(client_soc)
+        rep : gloutils.GloMessage = eval(message)
+        if rep.get("header") == gloutils.Headers.AUTH_LOGIN:
+            payload = rep.get("payload")
+            if (type(payload) == gloutils.AuthPayload):
+                self._login(client_soc, payload)
+            else:
+                pass
+
+
     def run(self):
         """Point d'entrée du serveur."""
         waiters = []
         while True:
             # Select readable sockets
+            result = select.select(
+                [self._server_socket] + self._client_socs, # Vérifie la lecture est possible
+                [], # Vérifie si l'écriture est possible (ne pas utiliser)
+                []  # Vérifie les conditions exceptionnelles (ne pas utiliser)
+            )
+            waiters: list[socket.socket] = result[0]
             for waiter in waiters:
                 # Handle sockets
-                pass
+                # Si le socket est celui du serveur, un nouveau client est en
+                # train de se connecter
+                if waiter == self._server_socket:
+                    self._accept_client()
+                # Sinon, on traite le client.
+                else:
+                    self.handle_client(waiter)
+
 
 
 def _main() -> int:
@@ -134,6 +173,30 @@ def _main() -> int:
         server.cleanup()
     return 0
 
+
+# def _main() -> NoReturn:
+#     server_socket = _make_socket()
+
+#     while True:
+#         # On passe à select comme premier argument une liste contenant les
+#         # sockets des clients et du serveur
+#         result = select.select(
+#             [server_socket] + _client_list, # Vérifie la lecture est possible
+#             [], # Vérifie si l'écriture est possible (ne pas utiliser)
+#             []  # Vérifie les conditions exceptionnelles (ne pas utiliser)
+#         )
+#         # Le résultat est un tuple de trois listes. La liste des sockets prêts
+#         # à être lu est toujours le premier élément de ce tuple.
+#         readable_socket: list[socket.socket] = result[0]
+
+#         for soc in readable_socket:
+#             # Si le socket est celui du serveur, un nouveau client est en
+#             # train de se connecter
+#             if soc == server_socket:
+#                 _new_client(soc)
+#             # Sinon, on traite le client.
+#             else:
+#                 _process_client(soc)
 
 if __name__ == '__main__':
     sys.exit(_main())
