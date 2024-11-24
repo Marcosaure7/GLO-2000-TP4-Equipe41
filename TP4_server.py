@@ -91,7 +91,65 @@ class Server:
 
         Une absence de courriel n'est pas une erreur, mais une liste vide.
         """
-        return gloutils.GloMessage()
+        try:
+            # Vérifie que l'utilisateur est connecté
+            username = self._logged_users.get(client_soc)
+            if not username:
+                return {
+                    "header": gloutils.Headers.ERROR,
+                    "payload": {"error_message": "Utilisateur non authentifié."}
+                }
+
+            # Chemin du dossier utilisateur
+            user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
+            if not os.path.exists(user_dir):
+                return {
+                    "header": gloutils.Headers.OK,
+                    "payload": {"email_list": []}  # Pas d'erreur mais liste vide
+                }
+
+            # Liste et trie les fichiers de courriels par date de modification (plus récent au plus ancien)
+            email_files = sorted(
+                [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))],
+                key=lambda f: os.path.getmtime(os.path.join(user_dir, f)),
+                reverse=True
+            )
+
+            # Construire la liste formatée des courriels
+            email_list = []
+            for index, filename in enumerate(email_files, start=1):
+                email_path = os.path.join(user_dir, filename)
+                with open(email_path, "r", encoding="utf-8") as email_file:
+                    try:
+                        # Charger le contenu JSON du courriel
+                        email_data = json.load(email_file)
+                        subject = email_data.get("subject", "Sans sujet")
+                        sender = email_data.get("sender", "Inconnu")
+                        date = email_data.get("date", "Date inconnue")
+
+                        # Formater l'entrée selon le gabarit
+                        formatted_email = gloutils.SUBJECT_DISPLAY.format(
+                            number=index,
+                            sender=sender,
+                            subject=subject,
+                            date=date
+                        )
+                        email_list.append(formatted_email)
+                    except json.JSONDecodeError:
+                        # Ignorer les fichiers mal formés
+                        continue
+
+            # Retourne la liste formatée
+            return {
+                "header": gloutils.Headers.OK,
+                "payload": {"email_list": email_list}
+            }
+
+        except Exception as ex:
+            return {
+                "header": gloutils.Headers.ERROR,
+                "payload": {"error_message": str(ex)}
+            }
 
     def _get_email(self, client_soc: socket.socket,
                    payload: gloutils.EmailChoicePayload
@@ -100,14 +158,75 @@ class Server:
         Récupère le contenu de l'email dans le dossier de l'utilisateur associé
         au socket.
         """
-        return gloutils.GloMessage()
+        try:
+            username = self._logged_users.get(client_soc)
+            if not username:
+                return {
+                    "header": gloutils.Headers.ERROR,
+                    "payload": {"error_message": "Utilisateur non authentifié."}
+                }
+
+            user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
+            email_files = sorted(
+                [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))],
+                key=lambda f: os.path.getmtime(os.path.join(user_dir, f)),
+                reverse=True
+            )
+
+            choice = payload.get("choice", 0)
+            if choice < 1 or choice > len(email_files):
+                return {
+                    "header": gloutils.Headers.ERROR,
+                    "payload": {"error_message": "Choix de courriel invalide."}
+                }
+
+            email_path = os.path.join(user_dir, email_files[choice - 1])
+            with open(email_path, "r", encoding="utf-8") as email_file:
+                content = email_file.read()
+
+            return {
+                "header": gloutils.Headers.OK,
+                "payload": {"content": content}
+            }
+        except Exception as ex:
+            return {
+                "header": gloutils.Headers.ERROR,
+                "payload": {"error_message": str(ex)}
+            }
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
         Récupère le nombre de courriels et la taille du dossier et des fichiers
         de l'utilisateur associé au socket.
         """
-        return gloutils.GloMessage()
+        try:
+            username = self._logged_users.get(client_soc)
+            if not username:
+                return {
+                    "header": gloutils.Headers.ERROR,
+                    "payload": {"error_message": "Utilisateur non authentifié."}
+                }
+
+            user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
+            if not os.path.exists(user_dir):
+                return {
+                    "header": gloutils.Headers.ERROR,
+                    "payload": {"error_message": "Dossier utilisateur introuvable."}
+                }
+
+            email_files = [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))]
+            count = len(email_files)
+            size = sum(os.path.getsize(os.path.join(user_dir, f)) for f in email_files)
+
+            return {
+                "header": gloutils.Headers.OK,
+                "payload": {"count": count, "size": size}
+            }
+        except Exception as ex:
+            return {
+                "header": gloutils.Headers.ERROR,
+                "payload": {"error_message": str(ex)}
+            }
 
     def _send_email(self, payload: gloutils.EmailContentPayload
                     ) -> gloutils.GloMessage:
