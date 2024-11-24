@@ -88,11 +88,10 @@ class Server:
         Récupère la liste des courriels de l'utilisateur associé au socket.
         Les éléments de la liste sont construits à l'aide du gabarit
         SUBJECT_DISPLAY et sont ordonnés du plus récent au plus ancien.
-
-        Une absence de courriel n'est pas une erreur, mais une liste vide.
+        Une absence de courriels n'est pas une erreur, mais retourne une liste vide.
         """
         try:
-            # Vérifie que l'utilisateur est connecté
+            # Vérification de l'utilisateur connecté
             username = self._logged_users.get(client_soc)
             if not username:
                 return {
@@ -100,72 +99,56 @@ class Server:
                     "payload": {"error_message": "Utilisateur non authentifié."}
                 }
 
-            # Chemin du dossier utilisateur
+            # Récupération des fichiers d'emails triés
             user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
             if not os.path.exists(user_dir):
-                return {
-                    "header": gloutils.Headers.OK,
-                    "payload": {"email_list": []}  # Pas d'erreur mais liste vide
-                }
+                return {"header": gloutils.Headers.OK, "payload": {"email_list": []}}
 
-            # Liste et trie les fichiers de courriels par date de modification (plus récent au plus ancien)
             email_files = sorted(
                 [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))],
                 key=lambda f: os.path.getmtime(os.path.join(user_dir, f)),
                 reverse=True
             )
 
-            # Construire la liste formatée des courriels
+            # Construction de la liste formatée
             email_list = []
             for index, filename in enumerate(email_files, start=1):
                 email_path = os.path.join(user_dir, filename)
                 with open(email_path, "r", encoding="utf-8") as email_file:
                     try:
-                        # Charger le contenu JSON du courriel
                         email_data = json.load(email_file)
-                        subject = email_data.get("subject", "Sans sujet")
-                        sender = email_data.get("sender", "Inconnu")
-                        date = email_data.get("date", "Date inconnue")
-
-                        # Formater l'entrée selon le gabarit
                         formatted_email = gloutils.SUBJECT_DISPLAY.format(
                             number=index,
-                            sender=sender,
-                            subject=subject,
-                            date=date
+                            sender=email_data.get("sender", "Inconnu"),
+                            subject=email_data.get("subject", "Sans sujet"),
+                            date=email_data.get("date", "Date inconnue")
                         )
                         email_list.append(formatted_email)
                     except json.JSONDecodeError:
-                        # Ignorer les fichiers mal formés
                         continue
 
-            # Retourne la liste formatée
-            return {
-                "header": gloutils.Headers.OK,
-                "payload": {"email_list": email_list}
-            }
+            return {"header": gloutils.Headers.OK, "payload": {"email_list": email_list}}
 
         except Exception as ex:
-            return {
-                "header": gloutils.Headers.ERROR,
-                "payload": {"error_message": str(ex)}
-            }
+            return {"header": gloutils.Headers.ERROR, "payload": {"error_message": str(ex)}}
 
     def _get_email(self, client_soc: socket.socket,
                    payload: gloutils.EmailChoicePayload
                    ) -> gloutils.GloMessage:
         """
-        Récupère le contenu de l'email dans le dossier de l'utilisateur associé
-        au socket.
+        Récupère le contenu de l'email sélectionné dans le dossier de l'utilisateur
+        associé au socket.
         """
         try:
-            username = self._logged_users.get(client_soc)
-            if not username:
-                return {
-                    "header": gloutils.Headers.ERROR,
-                    "payload": {"error_message": "Utilisateur non authentifié."}
-                }
+            # Appeler _get_email_list pour récupérer la liste des courriels
+            email_list_response = self._get_email_list(client_soc)
 
+            # Vérifier si _get_email_list a retourné une erreur
+            if email_list_response["header"] == gloutils.Headers.ERROR:
+                return email_list_response
+
+            # Récupérer les fichiers associés à l'utilisateur
+            username = self._logged_users.get(client_soc)
             user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
             email_files = sorted(
                 [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))],
@@ -173,6 +156,7 @@ class Server:
                 reverse=True
             )
 
+            # Validation du choix de l'utilisateur
             choice = payload.get("choice", 0)
             if choice < 1 or choice > len(email_files):
                 return {
@@ -180,14 +164,26 @@ class Server:
                     "payload": {"error_message": "Choix de courriel invalide."}
                 }
 
+            # Lecture du fichier correspondant
             email_path = os.path.join(user_dir, email_files[choice - 1])
             with open(email_path, "r", encoding="utf-8") as email_file:
-                content = email_file.read()
+                email_data = json.load(email_file)
 
+            # Créer un EmailContentPayload
+            email_payload: gloutils.EmailContentPayload = {
+                "sender": email_data.get("sender", "Inconnu"),
+                "destination": email_data.get("destination", "Inconnu"),  # Utilisez "destination"
+                "subject": email_data.get("subject", "Sans sujet"),
+                "date": email_data.get("date", "Date inconnue"),
+                "content": email_data.get("content", "")  # Utilisez "content"
+            }
+
+            # Retourner le message structuré
             return {
                 "header": gloutils.Headers.OK,
-                "payload": {"content": content}
+                "payload": email_payload
             }
+
         except Exception as ex:
             return {
                 "header": gloutils.Headers.ERROR,
