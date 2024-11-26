@@ -48,7 +48,6 @@ class Client:
         `_username` est mis à jour, sinon l'erreur est affichée.
         """
         
-        
         username_temp = input(" Entrez un nom d'utilisateur: ")
         password_temp = getpass.getpass("Entrez un mot de passe : ")
         
@@ -80,11 +79,41 @@ class Client:
         est mis à jour, sinon l'erreur est affichée.
         """
 
+        username_temp = input(" Entrez votre nom d'utilisateur: ")
+        password_temp = getpass.getpass("Entrez votre mot de passe : ")
+
+        try:
+            auth_payload: gloutils.AuthPayload = {"username": username_temp, "password": password_temp}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGIN, "payload": auth_payload}
+
+            glosocket.snd_mesg(self._socket, message)
+            reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
+            
+            if reponse["header"] == gloutils.Headers.OK:
+                self._username = reponse["payload"]["username"]
+                self._password = reponse["payload"]["password"]
+
+            elif reponse["header"] == gloutils.Headers.ERROR:
+                print(reponse["payload"]["error_message"])
+
+        except glosocket.GLOSocketError:
+            print("Le client n'a pas réussi à envoyer les informations de compte au serveur.")
+
+
     def _quit(self) -> None:
         """
         Préviens le serveur de la déconnexion avec l'entête `BYE` et ferme le
         socket du client.
         """
+
+        try:
+            message_bye: gloutils.GloMessage = {"header":gloutils.Headers.BYE}
+            glosocket.snd_mesg(self._socket, message_bye)
+            self._socket.close()
+            
+        except glosocket.GLOSocketError:
+            print("Le client n'a pas réussi à envoyer la requête de fermeture au serveur")
+
 
     def _read_email(self) -> None:
         """
@@ -100,6 +129,50 @@ class Client:
         retourner au menu principal.
         """
 
+        try:
+            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_REQUEST}
+
+            glosocket.snd_mesg(self._socket, message)
+            reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
+            
+            if reponse["header"] != gloutils.EmailListPayload:
+                print("Il y a eu erreur côté serveur.")
+                return
+
+            # TODO Retourner au menu principal si liste vide
+
+            email_list = reponse["payload"]["email_list"]
+
+            for email in email_list:
+                print(email)
+
+            num_courriel_a_consulter = self._user_choice_in_email_list(range(1, len(email_list)))
+            
+            email_choice_payload: gloutils.EmailChoicePayload = {"choice": num_courriel_a_consulter}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload":email_choice_payload}
+
+            glosocket.snd_mesg(self._socket, message)
+            reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
+
+            formatted_email = f'{gloutils.SUBJECT_DISPLAY.format(**reponse["payload"])}\n{gloutils.EMAIL_DISPLAY.format(**reponse["payload"])}'
+            print(formatted_email)
+            
+
+        except glosocket.GLOSocketError:
+            print("Le client n'a pas réussi à envoyer la requête de courriel(s) au serveur.")
+
+
+    def _user_choice_in_email_list(self, email_nb_list):
+        """
+        Demande à l'utilisateur un choix dans la liste de courriels présentée à lui.
+        """
+        while (True):
+            num_courriel_a_consulter = input(f"Entrez votre choix [{email_nb_list[0]}-{email_nb_list[-1]}]")
+            
+            if num_courriel_a_consulter in email_nb_list:
+                return num_courriel_a_consulter
+
+
     def _send_email(self) -> None:
         """
         Demande à l'utilisateur respectivement:
@@ -111,6 +184,15 @@ class Client:
 
         Transmet ces informations avec l'entête `EMAIL_SENDING`.
         """
+        adresse_courriel = input("Entrez l'adresse du destinataire: ")
+        sujet = input("Entrez le sujet: ")
+        contenu = input("Entrez le contenu du courriel, terminez la saisie avec un '.' seul sur une ligne:\n")
+
+        ligne_contenu_supp = ""
+        while (ligne_contenu_supp is not "."):
+            ligne_contenu_supp = input()
+            contenu += ligne_contenu_supp + "\n"
+        
 
     def _check_stats(self) -> None:
         """
