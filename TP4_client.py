@@ -184,15 +184,38 @@ class Client:
 
         Transmet ces informations avec l'entête `EMAIL_SENDING`.
         """
-        adresse_courriel = input("Entrez l'adresse du destinataire: ")
+        adresse_destinataire = input("Entrez l'adresse du destinataire: ")
         sujet = input("Entrez le sujet: ")
         contenu = input("Entrez le contenu du courriel, terminez la saisie avec un '.' seul sur une ligne:\n")
 
         ligne_contenu_supp = ""
-        while (ligne_contenu_supp is not "."):
+        while (ligne_contenu_supp != "."):
             ligne_contenu_supp = input()
-            contenu += ligne_contenu_supp + "\n"
+            contenu += "\n" + ligne_contenu_supp
+
+        contenu = contenu[:-2] # On enlève le "\n." du string
+        reponse_serveur = ""
+
+        try:
+            # Envoi au serveur
+            send_email_payload: gloutils.EmailContentPayload = {"sender": self._username, "destination": adresse_destinataire, 
+                                                                "date": gloutils.get_current_utc_time, "subject": sujet, "content": contenu}
+            
+            message: gloutils.GloMessage = {"header": gloutils.Headers.EMAIL_SENDING, "payload":send_email_payload}
+
+            # Vérifier si le serveur a bien reçu
+            glosocket.snd_mesg(self._socket, message)
+            reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
+            
+            
+            if reponse["header"] is gloutils.Headers.ERROR:
+                reponse_serveur = "Le serveur a rencontré une erreur lors de la demande d'envoi de courriel."  
+            else:
+                reponse_serveur = "Le serveur a bien traité la demande d'envoi de courriel."
+        except(glosocket.GLOSocketError):
+            reponse_serveur = ("Le serveur a rencontré une erreur lors de la demande d'envoi de courriel.")
         
+        print(reponse_serveur)
 
     def _check_stats(self) -> None:
         """
@@ -200,6 +223,23 @@ class Client:
 
         Affiche les statistiques à l'aide du gabarit `STATS_DISPLAY`.
         """
+        try:
+            message: gloutils.GloMessage = {"header": gloutils.Headers.STATS_REQUEST}
+        
+            # Vérifier si le serveur a bien reçu
+            glosocket.snd_mesg(self._socket, message)
+            reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
+
+            if reponse["header"] is gloutils.Headers.ERROR:
+                print("Le serveur a rencontré une erreur lors de la demande de statistiques.")
+            elif reponse["payload"] != gloutils.StatsPayload:
+                print("Le client n'a pas reçu les statistiques.")
+            else:
+                print(gloutils.STATS_DISPLAY.format(**reponse["payload"]))
+
+        except(glosocket.GLOSocketError):
+            print("Le client n'a pas réussi à envoyer la requête de statistiques au serveur.")
+
 
     def _logout(self) -> None:
         """
@@ -207,6 +247,20 @@ class Client:
 
         Met à jour l'attribut `_username`.
         """
+        try:
+            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGOUT}
+            glosocket.snd_mesg(self._socket, message)
+
+            reponse = eval(glosocket.recv_mesg(self._socket))
+
+            if reponse["header"] is gloutils.Headers.ERROR:
+                print("Il y a eu une erreur côté serveur lors du traitement de la déconnexion.")
+            else:
+                self._username = ""
+        
+
+        except(glosocket.GLOSocketError):
+            print("Le client n'a pas réussi à envoyer la demande de déconnexion au serveur.")
 
     def run(self) -> None:
         """Point d'entrée du client."""
@@ -219,13 +273,18 @@ class Client:
             
                 if option == "1": self._register()
                 elif option == "2": self._login()
-                elif option == "3": self._quit()
+                elif option == "3": self._quit(); should_quit = True
                 else: print("Veuillez entrer une des options suivantes sur votre clavier, puis la touche [Entrée] pour valider!")
 
             else:
                 # Main menu
-                pass
+                option = input(gloutils.CLIENT_USE_CHOICE)
 
+                if option == "1": self._read_email()
+                elif option == "2": self._send_email()
+                elif option == "3": self._check_stats()
+                elif option == "4": self._logout()
+                else: print("Veuillez entrer une des options suivantes sur votre clavier, puis la touche [Entrée] pour valider!")
 
 def _main() -> int:
     parser = argparse.ArgumentParser()
