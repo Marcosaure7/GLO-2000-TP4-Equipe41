@@ -167,10 +167,15 @@ class Client:
         Demande à l'utilisateur un choix dans la liste de courriels présentée à lui.
         """
         while (True):
-            num_courriel_a_consulter = input(f"Entrez votre choix [{email_nb_list[0]}-{email_nb_list[-1]}]")
-            
-            if num_courriel_a_consulter in email_nb_list:
-                return num_courriel_a_consulter
+            try:
+                num_courriel_a_consulter = input(f"Entrez votre choix [{email_nb_list[0]}-{email_nb_list[-1]}]")
+                num_courriel_a_consulter = int(num_courriel_a_consulter)
+                
+                if num_courriel_a_consulter in email_nb_list:
+                    return num_courriel_a_consulter
+                
+            except ValueError:
+                print("Veuillez entrez un nombre entier.")
 
 
     def _send_email(self) -> None:
