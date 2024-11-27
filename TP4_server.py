@@ -156,6 +156,149 @@ class Server:
             error_payload = gloutils.ErrorPayload(error_message="Le destinataire est externe. L'envoi a échoué.")
             return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
 
+    def _get_email_list(self, client_soc: socket.socket) -> gloutils.GloMessage:
+        """
+        Récupère et renvoie la liste des courriels pour l'utilisateur connecté.
+        Met à jour le cache centralisé avec la liste.
+        """
+        try:
+            # Vérification de l'utilisateur connecté
+            username = self._logged_users.get(client_soc)
+            if not username:
+                error_payload = gloutils.ErrorPayload(error_message="Utilisateur non authentifié.")
+                return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+            # Chemin du dossier utilisateur
+            user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
+
+            # Vérification du dossier utilisateur
+            if not os.path.exists(user_dir):
+                self._email_cache[username] = []  # Mettre à jour le cache avec une liste vide
+                return gloutils.GloMessage(header=gloutils.Headers.OK, payload={"email_list": []})
+
+            # Récupération et tri des fichiers d'emails par date
+            email_files = sorted(
+                [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))],
+                key=lambda f: os.path.getmtime(os.path.join(user_dir, f)),
+                reverse=True
+            )
+
+            # Construction de la liste des courriels en respectant le formatqge demander
+            email_list = []
+            for index, filename in enumerate(email_files, start=1):
+                email_path = os.path.join(user_dir, filename)
+                try:
+                    with open(email_path, "r", encoding="utf-8") as email_file:
+                        email_data = json.load(email_file)
+                        formatted_email = gloutils.SUBJECT_DISPLAY.format(
+                            number=index,
+                            sender=email_data.get("sender", "Inconnu"),
+                            subject=email_data.get("subject", "Sans sujet"),
+                            date=email_data.get("date", "Date inconnue")
+                        )
+                        email_list.append({"formatted": formatted_email, "filename": filename})
+                except json.JSONDecodeError:
+                    continue
+
+            # Mettre à jour le cache utilisateur pour pouvoir l'utuliser dans get email
+            self._email_cache[username] = email_list
+
+            # Retourner la liste formatée
+            return gloutils.GloMessage(
+                header=gloutils.Headers.OK,
+                payload={"email_list": [email["formatted"] for email in email_list]}
+            )
+
+        except Exception as ex:
+            error_payload = gloutils.ErrorPayload(
+                error_message=f"Erreur lors de la récupération des courriels : {str(ex)}")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+
+
+    def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
+        """
+        Récupère les statistiques sur les courriels d'un utilisateur.
+        Retourne un GloMessage structuré avec le nombre de courriels et la taille totale du dossier.
+        """
+        try:
+            # Vérification de l'utilisateur connecté
+            username = self._logged_users.get(client_soc)
+            if not username:
+                error_payload = gloutils.ErrorPayload(error_message="Utilisateur non authentifié.")
+                return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+            # Récupération du dossier utilisateur et initiatiliser le cout et le size a 0
+            user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username)
+            if not os.path.exists(user_dir):
+                return gloutils.GloMessage(
+                    header=gloutils.Headers.OK,
+                    payload={"count": 0, "size": 0}
+                )
+
+            # Calcul des statistiques
+            email_files = [f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))]
+            count = len(email_files)
+            size = sum(os.path.getsize(os.path.join(user_dir, f)) for f in email_files)
+
+            # Retour des statistiques
+            return gloutils.GloMessage(
+                header=gloutils.Headers.OK,
+                payload={"count": count, "size": size}
+            )
+
+        except Exception as ex:
+            error_payload = gloutils.ErrorPayload(
+                error_message=f"Erreur lors de la récupération des statistiques : {str(ex)}")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+    def _get_email(self, client_soc: socket.socket, payload: gloutils.EmailChoicePayload) -> gloutils.GloMessage:
+        """
+        Récupère le contenu d'un courriel spécifique en réutilisant le cache centralisé.
+        """
+        try:
+            # Vérification de l'utilisateur connecté
+            username = self._logged_users.get(client_soc)
+            if not username:
+                error_payload = gloutils.ErrorPayload(error_message="Utilisateur non authentifié.")
+                return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+            # Vérification du cache utilisateur
+            if username not in self._email_cache or not self._email_cache[username]:
+                error_payload = gloutils.ErrorPayload(error_message="La liste des courriels est vide ou non chargée.")
+                return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+            # Récupération du choix utilisateur
+            choice = payload.get("choice", 0)
+            email_list = self._email_cache[username]
+            if choice < 1 or choice > len(email_list):
+                error_payload = gloutils.ErrorPayload(error_message="Choix de courriel invalide.")
+                return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+            # Lecture du fichier correspondant au choix de l'utulisatuer
+            selected_email = email_list[choice - 1]
+            email_path = os.path.join(gloutils.SERVER_DATA_DIR, username, selected_email["filename"])
+            with open(email_path, "r", encoding="utf-8") as email_file:
+                email_data = json.load(email_file)
+
+            # Structurer le payload pour le courriel
+            email_payload = {
+                "sender": email_data.get("sender", "Inconnu"),
+                "to": email_data.get("destination", "Inconnu"),
+                "subject": email_data.get("subject", "Sans sujet"),
+                "date": email_data.get("date", "Date inconnue"),
+                "body": email_data.get("content", "")
+            }
+
+            return gloutils.GloMessage(header=gloutils.Headers.OK, payload=email_payload)
+
+        except Exception as ex:
+            error_payload = gloutils.ErrorPayload(
+                error_message=f"Erreur lors de la récupération du courriel : {str(ex)}")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+
+
     def handle_client(self, client_soc: socket.socket) -> None:
         message = glosocket.recv_mesg(client_soc)
         rep: gloutils.GloMessage = eval(message)
