@@ -13,6 +13,7 @@ import os
 import select
 import socket
 import sys
+import re
 
 import glosocket
 import gloutils
@@ -62,7 +63,44 @@ class Server:
         associe le socket au nouvel l'utilisateur et retourne un succès,
         sinon retourne un message d'erreur.
         """
-        return gloutils.GloMessage()
+        _username = payload["username"]
+        # username_ok = False
+
+        _password = payload["password"]
+        # password_ok = False
+        
+        # Vérification des caractères interdits
+        if re.search(r"[_.-]", _username) is not None:
+            error_payload: gloutils.ErrorPayload = {"error_message": "Le username contient des caractères interdits."}
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+        
+        # Vérification username inexistant
+        list_usernames_lowered = [username.lower() for username in os.listdir if os.path.isdir(username)]
+        if _username.lower() in list_usernames_lowered:
+            error_payload: gloutils.ErrorPayload = {"error_message": "Le username est déjà utilisé."}
+            message_derreur: gloutils.GloMessage = {"header": gloutils.Headers.ERROR, "payload":error_payload}
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+        
+
+        # Vérification force du password
+        if len(_password) < 10 and re.search(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]+$", _password) is None:
+            error_payload: gloutils.ErrorPayload = {"error_message": "Le mot de passe n'est pas assez fort."}
+            message_derreur: gloutils.GloMessage = {"header": gloutils.Headers.ERROR, "payload":error_payload}
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+        # À partir d'ici on sait que l'utilisateur et son mot de passe sont OK
+        # donc on l'ajoute à SERVER_DATA_DIR
+
+        path = f"{gloutils.SERVER_DATA_DIR}/{_username}"
+        os.makedirs(path, exist_ok=True)
+        hashed_pass = hashlib.sha3_512(_password)
+
+        with open(os.path.join(path, gloutils.PASSWORD_FILENAME), 'w') as file_pass: 
+            file_pass.write(hashed_pass)
+
+        self._logged_users[client_soc] = _username
+
+        return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
                ) -> gloutils.GloMessage:
@@ -72,12 +110,26 @@ class Server:
         Si les identifiants sont valides, associe le socket à l'utilisateur et
         retourne un succès, sinon retourne un message d'erreur.
         """
-        username = payload.get("username")
-        password = payload.get("password")
-        mess = gloutils.GloMessage()
-        mess["header"] = gloutils.Headers.OK
-        return mess
+        username = payload["username"]
+        password = payload["password"]
 
+        # On vérifie si l'utilisateur existe dans la base de données
+        if username not in os.listdir(gloutils.SERVER_DATA_DIR):
+            error_payload = gloutils.ErrorPayload(error_message="Le nom d'utilisateur n'est pas dans la base de données.")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+        # On hache le mot de passe pour le comparer à celui enregistré
+        hashed_pass = hashlib.sha3_512(password)
+        pass_file = open(f"{gloutils.SERVER_DATA_DIR}/{username}/{gloutils.PASSWORD_FILENAME}")
+
+        # On compare le mot de passe entré à celui enregistré
+        if hashed_pass is not pass_file.read():
+            error_payload = gloutils.ErrorPayload(error_message="Le mot de passe dans la base de données ne correspond pas à celui entré.")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
+
+        # Tout est bon, on connecte le socket client à son username
+        self._logged_users[client_soc] = username
+        return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
@@ -266,8 +318,10 @@ class Server:
         rep : gloutils.GloMessage = eval(message)
         if rep.get("header") == gloutils.Headers.AUTH_LOGIN:
             self.send_conection_confirmation(rep, client_soc)
-        elif ():
-            pass
+        elif rep["header"] is gloutils.Headers.AUTH_REGISTER:
+            self._create_account(client_soc, rep["payload"])
+        elif rep["header"] is gloutils.Headers.AUTH_LOGIN:
+            self._login(client_soc, rep["payload"])
 
 
     def run(self):
