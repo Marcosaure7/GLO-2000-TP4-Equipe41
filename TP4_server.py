@@ -168,6 +168,12 @@ class Server:
         elif rep["header"] == gloutils.Headers.EMAIL_SENDING:
             response = self._send_email(client_soc, rep["payload"])
             glosocket.snd_mesg(client_soc, str(response))
+        elif rep["header"] == gloutils.Headers.INBOX_READING_REQUEST:
+            self._get_email_list(client_soc)
+        elif rep["header"] == gloutils.Headers.INBOX_READING_CHOICE:
+            self._get_email(client_soc, rep["payload"])
+        elif rep["header"] == gloutils.Headers.STATS_REQUEST:
+            self._get_stats(client_soc)
 
     def run(self):
         """Point d'entrée du serveur."""
