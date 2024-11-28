@@ -248,6 +248,7 @@ class Server:
             )
 
         except Exception as ex:
+            #os erreur  et exepet os erreur  pour tut ce qui a la lecture de fichier
             error_payload = gloutils.ErrorPayload(
                 error_message=f"Erreur lors de la récupération des statistiques : {str(ex)}")
             return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=error_payload)
@@ -270,6 +271,7 @@ class Server:
 
             # Récupération du choix utilisateur
             choice = payload.get("choice", 0)
+            # choise = payload["choice"]
             email_list = self._email_cache[username]
             if choice < 1 or choice > len(email_list):
                 error_payload = gloutils.ErrorPayload(error_message="Choix de courriel invalide.")
@@ -282,13 +284,8 @@ class Server:
                 email_data = json.load(email_file)
 
             # Structurer le payload pour le courriel
-            email_payload = {
-                "sender": email_data.get("sender", "Inconnu"),
-                "to": email_data.get("destination", "Inconnu"),
-                "subject": email_data.get("subject", "Sans sujet"),
-                "date": email_data.get("date", "Date inconnue"),
-                "body": email_data.get("content", "")
-            }
+
+            email_payload : gloutils.EmailContentPayload = email_data
 
             return gloutils.GloMessage(header=gloutils.Headers.OK, payload=email_payload)
 
