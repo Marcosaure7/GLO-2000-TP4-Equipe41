@@ -53,14 +53,14 @@ class Client:
         
         try:
             auth_payload: gloutils.AuthPayload = {"username": username_temp, "password": password_temp}
-            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_REGISTER, "payload": auth_payload}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_REGISTER.value, "payload": auth_payload}
 
             glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             if reponse["header"] == gloutils.Headers.OK:
-                self._username = reponse["payload"]["username"]
-                self._password = reponse["payload"]["password"]
+                self._username = username_temp
+                self._password = password_temp
             
             elif reponse["header"] == gloutils.Headers.ERROR:
                 print(reponse["payload"]["error_message"])
@@ -84,14 +84,14 @@ class Client:
 
         try:
             auth_payload: gloutils.AuthPayload = {"username": username_temp, "password": password_temp}
-            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGIN, "payload": auth_payload}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGIN.value, "payload": auth_payload}
 
             glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             if reponse["header"] == gloutils.Headers.OK:
-                self._username = reponse["payload"]["username"]
-                self._password = reponse["payload"]["password"]
+                self._username = username_temp
+                self._password = password_temp
 
             elif reponse["header"] == gloutils.Headers.ERROR:
                 print(reponse["payload"]["error_message"])
@@ -107,7 +107,7 @@ class Client:
         """
 
         try:
-            message_bye: gloutils.GloMessage = {"header":gloutils.Headers.BYE}
+            message_bye: gloutils.GloMessage = {"header":gloutils.Headers.BYE.value}
             glosocket.snd_mesg(self._socket, str(message_bye))
             self._socket.close()
             
@@ -130,7 +130,7 @@ class Client:
         """
 
         try:
-            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_REQUEST}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_REQUEST.value}
 
             glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
@@ -147,7 +147,7 @@ class Client:
             num_courriel_a_consulter = self._user_choice_in_email_list(range(1, len(email_list)))
             
             email_choice_payload: gloutils.EmailChoicePayload = {"choice": num_courriel_a_consulter}
-            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload":email_choice_payload}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_CHOICE.value, "payload":email_choice_payload}
 
             glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
@@ -202,9 +202,9 @@ class Client:
         try:
             # Envoi au serveur
             send_email_payload: gloutils.EmailContentPayload = {"sender": self._username, "destination": adresse_destinataire, 
-                                                                "date": gloutils.get_current_utc_time, "subject": sujet, "content": contenu}
+                                                                "date": gloutils.get_current_utc_time(), "subject": sujet, "content": contenu}
             
-            message: gloutils.GloMessage = {"header": gloutils.Headers.EMAIL_SENDING, "payload":send_email_payload}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.EMAIL_SENDING.value, "payload":send_email_payload}
 
             # Vérifier si le serveur a bien reçu
             glosocket.snd_mesg(self._socket, str(message))
@@ -227,7 +227,7 @@ class Client:
         Affiche les statistiques à l'aide du gabarit `STATS_DISPLAY`.
         """
         try:
-            message: gloutils.GloMessage = {"header": gloutils.Headers.STATS_REQUEST}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.STATS_REQUEST.value}
         
             # Vérifier si le serveur a bien reçu
             glosocket.snd_mesg(self._socket, str(message))
@@ -235,8 +235,6 @@ class Client:
 
             if reponse["header"] is gloutils.Headers.ERROR:
                 print("Le serveur a rencontré une erreur lors de la demande de statistiques.")
-            elif reponse["payload"] != gloutils.StatsPayload:
-                print("Le client n'a pas reçu les statistiques.")
             else:
                 print(gloutils.STATS_DISPLAY.format(**reponse["payload"]))
 
@@ -251,7 +249,7 @@ class Client:
         Met à jour l'attribut `_username`.
         """
         try:
-            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGOUT}
+            message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGOUT.value}
             glosocket.snd_mesg(self._socket, str(message))
 
             reponse = eval(glosocket.recv_mesg(self._socket))
