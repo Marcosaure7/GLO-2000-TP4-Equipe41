@@ -55,7 +55,7 @@ class Client:
             auth_payload: gloutils.AuthPayload = {"username": username_temp, "password": password_temp}
             message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_REGISTER, "payload": auth_payload}
 
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             if reponse["header"] == gloutils.Headers.OK:
@@ -86,7 +86,7 @@ class Client:
             auth_payload: gloutils.AuthPayload = {"username": username_temp, "password": password_temp}
             message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGIN, "payload": auth_payload}
 
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             if reponse["header"] == gloutils.Headers.OK:
@@ -108,7 +108,7 @@ class Client:
 
         try:
             message_bye: gloutils.GloMessage = {"header":gloutils.Headers.BYE}
-            glosocket.snd_mesg(self._socket, message_bye)
+            glosocket.snd_mesg(self._socket, str(message_bye))
             self._socket.close()
             
         except glosocket.GLOSocketError:
@@ -132,14 +132,12 @@ class Client:
         try:
             message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_REQUEST}
 
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             if reponse["header"] != gloutils.EmailListPayload:
                 print("Il y a eu erreur côté serveur.")
                 return
-
-            # TODO Retourner au menu principal si liste vide
 
             email_list = reponse["payload"]["email_list"]
 
@@ -151,7 +149,7 @@ class Client:
             email_choice_payload: gloutils.EmailChoicePayload = {"choice": num_courriel_a_consulter}
             message: gloutils.GloMessage = {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload":email_choice_payload}
 
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
 
             formatted_email = f'{gloutils.SUBJECT_DISPLAY.format(**reponse["payload"])}\n{gloutils.EMAIL_DISPLAY.format(**reponse["payload"])}'
@@ -209,7 +207,7 @@ class Client:
             message: gloutils.GloMessage = {"header": gloutils.Headers.EMAIL_SENDING, "payload":send_email_payload}
 
             # Vérifier si le serveur a bien reçu
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
             
             
@@ -232,7 +230,7 @@ class Client:
             message: gloutils.GloMessage = {"header": gloutils.Headers.STATS_REQUEST}
         
             # Vérifier si le serveur a bien reçu
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
             reponse: gloutils.GloMessage = eval(glosocket.recv_mesg(self._socket))
 
             if reponse["header"] is gloutils.Headers.ERROR:
@@ -254,7 +252,7 @@ class Client:
         """
         try:
             message: gloutils.GloMessage = {"header": gloutils.Headers.AUTH_LOGOUT}
-            glosocket.snd_mesg(self._socket, message)
+            glosocket.snd_mesg(self._socket, str(message))
 
             reponse = eval(glosocket.recv_mesg(self._socket))
 
@@ -274,7 +272,7 @@ class Client:
         while not should_quit:
             if not self._username:
                 # Authentication menu
-                option = input(gloutils.CLIENT_AUTH_CHOICE)
+                option = input(f"{gloutils.CLIENT_AUTH_CHOICE}\nEntrez votre choix entre [1-3] : ")
             
                 if option == "1": self._register()
                 elif option == "2": self._login()
@@ -283,7 +281,7 @@ class Client:
 
             else:
                 # Main menu
-                option = input(gloutils.CLIENT_USE_CHOICE)
+                option = input(f"{gloutils.CLIENT_USE_CHOICE}\nEntrez votre choix entre [1-4] : ")
 
                 if option == "1": self._read_email()
                 elif option == "2": self._send_email()
