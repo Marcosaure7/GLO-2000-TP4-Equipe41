@@ -30,7 +30,7 @@ class Client:
         try:
             self._socket = glosocket.socket.socket(glosocket.socket.AF_INET, glosocket.socket.SOCK_STREAM)
             address = (destination, gloutils.APP_PORT)
-            #_socket.connect(address)
+            self._socket.connect(address)
     
         except glosocket.GLOSocketError:
             print("Le client n'a pas pu se connecter.")
